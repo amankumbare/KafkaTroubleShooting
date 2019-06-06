@@ -1,0 +1,192 @@
+/usr/hd[pf]/current/zookeeper-client/bin/zkCli.sh -server $(awk -F "=" '/zookeeper.connect=/ {print $NF}' /etc/kafka/conf/server.properties) ls /brokers/ids
+
+for i in 1008 1007 1005 1004 1003 1012 1011 1010 1009
+do
+/usr/hdp/current/zookeeper-client/bin/zkCli.sh -server $(awk -F "=" '/zookeeper.connect=/ {print $NF}' /etc/kafka/conf/server.properties) get /brokers/ids/${i} >> /tmp/brokers_output.txt
+echo
+done
+
+**LIST OF COMMANDS :**
+
+⁃	Create a topic :
+# /usr/hdp/current/kafka-broker/bin/kafka-topics.sh --create --zookeeper `hostname -f`:2181 --replication-factor 1 --partitions 2 --topic  Test
+
+**⁃	To List the Topic :**
+
+[**kafka-topics.sh](http://kafka-topics.sh/) --list --zookeeper localhost:2181**
+
+⁃	Producer scripts to produce messages :
+
+/usr/hdp/current/kafka-broker/bin/kafka-console-producer.sh --broker-list `hostname -f`:6667 --topic vtest
+
+⁃	Consumer script to consumer message :
+
+bin/kafka-console-consumer.sh --zookeeper localhost:2181 --topic test --from-beginning
+
+⁃	To describe a topic :
+
+bin/kafka-topics.sh --describe --zookeeper `hostname -f`:2181 --topic my-replicated-topic
+
+⁃	To list the message from beginning :
+
+bin/kafka-console-consumer.sh --zookeeper `hostname -f`:2181 --from-beginning --topic my-replicated-topic
+
+⁃	To verify if index file is corrupt or not ?
+
+for i in `ls -1 /kafka-logs/__consumer_offsets-*/*.log`; do /usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.DumpLogSegments --files $i --verify-index-only >>/tmp/invalidoffset.txt ; done;
+
+⁃	To see the total number of messages in log file :
+
+/usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.DumpLogSegments --deep-iteration --files 00000000000000000000.log
+
+====================================================
+
+- Dumplogsegments parses the log files, you can provide the multiple log files with comma seperated input. But the log retention policy of the log files is 168 hours. So if the older log files have got purged you would only be able to probe the currently available log files and get the details out of them
+
+bin/kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list 1 `hostname`:32774 --topic kafkatopic --time -1 | awk -F ":" '{sum += $3} END {print sum}'
+
+====================================================
+
+====================================================
+- For GetOffsetShell you would need to check the earliest offset as well and you would need to do a difference of the two if the following command gives a non-zero output.
+
+bin/kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list 1 `hostname`:32774 --topic kafkatopic --time -2 | awk -F ":" '{sum += $3} END {print sum}'
+
+====================================================
+
+====================================================
+⁃	Pass file to producer :
+
+/usr/hdp/current/kafka-broker/bin/kafka-console-producer.sh --broker-list `hostname -f`:6667 --topic test < test.txt
+
+====================================================
+
+====================================================
+- console consumer with GID
+
+/usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh --zookeeper `hostname -f`:2181 --consumer.config /etc/kafka/conf/consumer.properties --from-beginning --topic test
+
+====================================================
+
+====================================================
+⁃ To List ACLS for a topic
+
+NOTE : Kafka acls can only be changed by kafka user :
+
+/usr/hdp/current/kafka-broker/bin/kafka-acls.sh --list --topic rishi --authorizer-properties zookeeper.connect=`hostname -f`:2181
+
+====================================================
+[https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Authorization+Command+Line+Interface](https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Authorization+Command+Line+Interface)
+
+- add acls:
+
+====================================================
+
+/usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=`hostname`:2181 --add --allow-principal User:hdfs --operation All --topic test3
+
+====================================================
+
+====================================================
+- HOW TO ENABLE DEBUG IN KAFKA :
+
+cd /usr/hdp/current/kafka-broker/config/tools-log4j.properties :
+
+log4j.rootLogger=DEBUG, stderr
+
+====================================================
+- HOW TO ENABLE DEBUG KERBEROS FOR KAFKA
+
+-Dsun.security.krb5.debug=true
+
+KERBEROS COMMANDS :
+
+====================================================
+- Describe a consumer group :
+
+new consumer API :
+
+./kafka-consumer-groups.sh --new-consumer --bootstrap-server `hostname -f`:6667 --describe --group hadoop-consumer-group --security-protocol PLAINTEXTSASL
+
+Old consumer API :
+./kafka-consumer-groups.sh --zookeeper `hostname -f`:2181 --describe --security-protocol PLAINTEXTSASL --group hadoop-consumer-group --topic HADOOP
+
+====================================================
+- Producer
+
+./kafka-console-producer.sh --broker-list `hostname -f`:6667 --topic KAFKAUSER --security-protocol PLAINTEXTSASL
+
+====================================================
+
+====================================================
+
+Kafka All to allow user to read-consumer group and all /topicx`
+====================================================
+
+/usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=`hostname`:2181 --add --allow-principal User:kartik --consumer --topic DAIMLER --group daimler-consumer-group
+
+====================================================
+
+====================================================
+List consumers groups from kafka broker
+
+./kafka-consumer-groups.sh --bootstrap-server [kakfa.example.com:6667](http://kakfa.example.com:6667/) --new-consumer --list
+
+1. ./kafka-consumer-groups.sh --bootstrap-server [kakfa.example.com:6667](http://kakfa.example.com:6667/) --group groups-demo-submit-job --new-consumer --describe
+
+====================================================
+
+To check if kafka serivce principal resolves to user :
+
+hadoop org.apache.hadoop.security.HadoopKerberosName kafka/<host>
+
+====================================================
+
+To list consumer goup using PLAINTEXT and new consumer API :
+/usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=`hostname -f`:2181 --add --allow-principal User:anonymous --cluster --operation All
+
+Give Acls for anonymous user and consumer group:
+========================
+/usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=hostname -f:2181 --add --allow-principal User:anonymous --consumer --topic HPtest --group console-consumer-60008
+====================================================
+
+Gave acl’s for producer to anonymous user :
+
+./kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=`hostname -f`:2181 --add --allow-principal User:anonymous --producer --topic HPtest
+
+====================================================
+
+DEBUG ENABLE for RANGER / KAFKA Authorizer
+
+To enable debug log for authorization without ranger :
+
+[8:49 PM] Manikumar Reddy: append below to file
+log4j.appender.authorizerAppender=org.apache.log4j.DailyRollingFileAppender
+log4j.appender.authorizerAppender.DatePattern='.'yyyy-MM-dd-HH
+log4j.appender.authorizerAppender.File=${kafka.logs.dir}/kafka-authorizer.log
+log4j.appender.authorizerAppender.layout=org.apache.log4j.PatternLayout
+log4j.appender.authorizerAppender.layout.ConversionPattern=[%d] %p %m (%c)%n
+#Change this to debug to get the actual audit log for authorizer.
+log4j.logger.kafka.authorizer.logger=DEBUG, authorizerAppender
+log4j.additivity.kafka.authorizer.logger=false
+
+To enable debug for authorization with Ranger :
+~~
+log4j.appender.rangerAppender=org.apache.log4j.DailyRollingFileAppender
+log4j.appender.rangerAppender.DatePattern='.'yyyy-MM-dd-HH
+log4j.appender.rangerAppender.File=${kafka.logs.dir}/ranger_kafka.log
+log4j.appender.rangerAppender.layout=org.apache.log4j.PatternLayout
+log4j.appender.rangerAppender.layout.ConversionPattern=%d{ISO8601} %p [%t] %C{6} (%F:%L) - %m%n
+log4j.logger.org.apache.ranger=WARN, rangerAppender
+
+~~
+
+--new-consumer --bootstrap-server
+
+Enable debug in server.log :
+log4j.logger.kafka=DEBUG, kafkaAppender
+
+Oneway to address this issue is to treat topic like opaque data store.
+you can send schema name as message header if you are using kafka-0.11 or later.
+consumer can look at that header and route the message based on schema name header value.
+
+====================================================
