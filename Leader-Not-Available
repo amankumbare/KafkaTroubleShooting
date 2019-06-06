@@ -1,0 +1,23 @@
+For a newly created topic, one of the replica is elected as leader. When this leader is not available, one of the replicas in ISR is elected as the leader by the controller node. 
+
+What to check when the is leader is none or -1? 
+1. Run a describe command on a topic in question to confirm if a leader is available or not:
+# /usr/hdp/current/kafka-broker/bin/kafka-topics.sh/kafka-topics.sh --describe --zookeeper  zookeeeper.example.com:2181 --topic <TopicName>
+
+2. Confirm that there are broker IDs in the ISR section of describe command :
+Topic:<TopicName> PartitionCount:1 ReplicationFactor:3 Configs: 
+Topic: <TopicName> Partition: 0 Leader: XXXX Replicas: XXXX,YYYY,ZZZZ Isr: XXXX,YYYY,ZZZZ
+Where XXXX,YYYY,ZZZZ are broker ID's
+
+
+3. Make sure the brokers in the replica section of the topic describe command are up and running.
+
+4. Confirm whether the brokers IDs were changed or not. If broker IDs were changed, one can change the broker IDs back to the original ones. 
+
+ Note : If you are planning to change the broker IDs, make sure that there are no new topics associated to new IDs.  If they are associated, changing the brokers IDs back to the previous one can potentially cause the same situation yet again (no leader elected) for new topics.
+
+5. Check controller.log for any errors related to the topic. 
+
+6. Check server.log for any communication issues between brokers or between brokers and zookeeper servers.
+If the brokers IDs didn't change, then set unclean.leader.election to true, which will elect one of the replica as leader.  Be aware that this will likely lead to data loss. This setting favors availability over durability by allowing an out-of-sync replica to become leader if there are no in-sync replica available. 
+

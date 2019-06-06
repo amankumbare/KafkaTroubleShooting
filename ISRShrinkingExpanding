@@ -1,0 +1,24 @@
+Let's understand under which circumstances replicas will not be in ISR. 
+
+Assumptions:
+We have a single partition topic called TEST with a replication factor of 3.  Assume that the replicas for this partition are on brokers 1001, 1002 and 1003. Controller node elected Replica on broker 1001 as the leader and replicas 1002 and 1003 as followers and all replicas are part of the ISR. 
+Producer produced 30 messages and have been committed in topic TEST
+Assume that replica.lag.max.messages is set to 10 which means that as long as a follower is behind the leader by not more than 10 messages, it will not be removed from the ISR. 
+While replica.lag.time.max.ms is set to 600 ms which means that as long as the followers send a fetch request to the leader every 600 ms or earlier, they will not be marked as dead and will not be removed from the ISR.
+
+Discussion:
+If brokers 1002 or 1003 fall behind broker 1001 by more than 10 messages due to performance or availability issues, they will be removed from ISR.
+If brokers 1002 or 1003 fall behind broker 1001 by more than 600ms due to performance or availability issues, they will be removed from ISR.  
+
+How to troubleshoot ISR related issue :
+Make sure that the brokers that are not part of ISR are actually up and running. 
+If the brokers hosting the replicas are indeed up, check server.log to see if ISR is shrinking and expanding continuously. If not, continue to step 3; otherwise, skip to step 5 below.
+Login to zookeeper shell and check if brokers IDs are present under the znode named /brokers/ids. There might be some cases where process is running but the broker ID is not present in zookeeper. Observe if you can see broker ID entry in /brokers/ids or not. If this is the case then check if there are any connectivity issues between broker and zookeeper. If you don't see the entry of broker id in the /brokers/ids section, there might be a case that someone deleted it manually. Restarting broker will help in this situation
+Make sure that you see modification/append activity for the *.log files existing in the Kafka log directory.
+To further check the health of the log segments directly, run the DumpLogSegments tool directly on the most recent log segment to view the offset that was last committed by the replica.  Depending on how behind the log segment is, check the two following:
+In the server.properties, check the configure Kafka log.dir directories that contain Kafka physical data. For the disks associated with the data directories, check the I/O performance. Poor disk performance on the follower broker’s data directory can cause replication lag.
+Depending on the load of the cluster, it may be feasible to adjust this parameter to give some additional legroom for the follower replicas.
+
+Note:  Make sure ‘replica.fetch.wait.max.ms’ does not exceed ‘replica.lag.time.max.ms’.
+
+Controller:  If for whatever reason, the partition states simply refuse to display the correct state of the cluster and hence the correct ISR listings, you may try restarting the controller broker node to force-assign the controller role to another broker, causing a re-initialization of ISR listings.

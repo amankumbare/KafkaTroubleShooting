@@ -1,0 +1,115 @@
+1. Check if the node from which you are running the producer can communicate with the Kafka broker on the port on which the broker is listening.
+
+2. Run a describe command on topic:
+# /usr/hdp/current/kafka-broker/bin/kafka-topics.sh/kafka-topics.sh --describe --zookeeper  zookeeeper.example.com:2181 --topic <TopicName>
+
+3. Make sure that the leader is elected:
+Topic: <TopicName> Partition: 0 Leader: 1001 Replicas: 1001,1002,1003 Isr: 1001,1002,1003
+
+4. Confirm whether the customer has enabled Ranger for authorization or not. If yes, IP based policies should be defined. 
+
+Kafka ACLs are not considered when authentication is not enabled, but the customer can enabled Ranger policies in such case.
+
+In order to understand how to define policies when authentication is not enabled while Ranger is enabled for authorization, please refer below links:
+https://community.hortonworks.com/articles/17059/apache-ranger-and-kafka-1.html
+https://cwiki.apache.org/confluence/display/RANGER/Kafka+Plugin#KafkaPlugin-AuthorizingKafkaaccessovernon-authenticatedchannelviaRanger
+
+Unable to produce in secured cluster:
+Depending on the security protocol used, debug this issue accordingly:
+
+There few basic checks that need to be done:
+1. Make sure Leader is available for the Kafka topic.  Inspect the output of the describe command for the topic in question in order to confirm leader availability.
+2. Confirm that the node from where client is communicating is able to connect to the Kafka brokers on the appropriate port.
+
+--security-protocol PLAINTEXT:
+When the Kafka cluster is secured and client is using the PLAINEXT protocol in order to produce message, there is a catch in this case.  The catch is that every request is sent as Anonymous user. 
+So if a cluster is secured, make sure the anonymous user has access to produce messages to the topic based on the type of authorizer that is configured.
+
+If Kafka ACLs are used for authorization, use the following syntax:
+# bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=Zookeeper1.example.com:2181 --add --allow-principal User:Anonymous --producer --topic <Topic-Name>
+If Ranger is used for authorization, give the Anonymous user permission to produce to and describe the topic
+
+--security-protocol SASL_PLAINTEXT / PLAINTEXTSASL:
+There are instances where the client throws a generic error that doesn't provide enough information about what is going wrong. To tackle such conditions, we can do below checks:
+
+Make sure kerberos client is installed on the node.
+Check if you can obtain a ticket of the principal:
+
+If you want to obtain TGT using a password:
+# kinit <principalName> 
+
+If you are using keytab, check that the user has permission to read the keytab file:
+Using keytab:
+# kinit -kt /Path/to/Keytab <PrincipalName> 
+
+3. Check whether there is a ticket in the ticket cache that is expired:
+# klist 
+
+4. Check whether the user has read permission on the JAAS file that is used.
+
+5. Confirm whether the client can communicate to the Kafka broker on the port that the broker is listening:
+# ping broker1.hortonworks.com
+# telnet broker1.hortonworks.com 6667
+# nc -v broker1.hortonworks.com 6667
+
+6. Check that you are using the correct security protocol (specified on the command line with the --security-protocol parameter) as configured in server.properties for the brokers.
+
+7. Try exporting JAAS file environment variable and run producer again:
+# export KAFKA_CLIENT_KERBEROS_PARAMS="-Djava.security.auth.login.config=/Path/to/Jaas/File" 
+
+In order to enable debug for kerberos, add the -Dsun.security.krb5.debug=true parameter to the environment variable:
+# export KAFKA_CLIENT_KERBEROS_PARAMS="-Djava.security.auth.login.config=/Path/to/Jaas/File -Dsun.security.krb5.debug=true" 
+
+8. If you continue to face authentication issues, try enabling debug for console-producer on the Kafka client node.
+As root user:
+# vim /usr/hdp/current/kafka-broker/config/tools-log4j.properties 
+log4j.rootLogger=DEBUG, stderr 
+In the application logs, debug entries that include the principal used, security protocol used, and to which broker the request is being sent to should appear.
+
+9. If you confirm that authentication is working fine from the debug logging above, its time to confirm whether the user has the required permission on the topic. 
+If Kafka is configured to use Kafka ACLs 
+For discussion about the use of Kafka ACLs, see the following:  https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Authorization+Command+Line+Interface
+
+If Kafka is configured to use ranger, make sure the policy is defined for the topic and the principal
+
+10. There are scenarios where even though one has created policies for the correct user, the producer continues to fail with the UNKNOWN_TOPIC error.
+One important point to note is that Kafka uses it own auth to local rules for converting kerberos principals to usernames. 
+In such cases check the auth to local rules for Kafka and confirm whether there is a matching rule defined for the kerberos principal (specifically realm) in question. If the required auth to local rule is not present, then the kerberos principal is passed as user to ranger/Kafka authorizer and it gets denied.
+
+How to configure auth to local rules:  https://community.hortonworks.com/articles/14463/auth-to-local-rules-syntax.html
+
+For Kafka Authorizer:
+Enable debug logging for log4j (shown below) and confirm Kafka Authorizer use in the debug logs in kafka-authorizer.log:
+To enable debug log for authorization without ranger:
+log4j.logger.kafka.authorizer.logger=DEBUG, authorizerAppender
+
+For Ranger Authorizer:
+To confirm this behavior, check audits in the Ranger GUI.
+If audits are not working, enable debug logging for ranger_kafka.log by making below changes to log4j:
+To enable debug for authorization with Ranger:
+log4j.logger.org.apache.ranger=DEBUG, rangerAppender
+
+--security-protocol SSL
+1. Based on the configuration of the clientAuth property, the client will determine if two-way authentication or one-way authentication is used in the SSL connection.
+2. If clientAuth is set to required, then make sure that the producer.properites file contains:
+client keystore
+key password
+keystore password
+truststore
+truststore password
+
+In order to make two-way authentication work, make sure CA of the Kafka broker SSL certificate is present in client truststore and CA of client is present in Kafka truststore.
+
+Note : Make sure ExtendedKeyUsages section has the serverAuth and clientAuth parameters included in the server and client certificates.
+#6: ObjectId: 2.5.29.37 Criticality=false 
+ExtendedKeyUsages [ 
+serverAuth 
+clientAuth
+
+3. If clientAuth is set to none/requested, then only the truststore and truststore password are required in producer.properties file.
+Reference: https://docs.hortonworks.com/HDPDocuments/HDP2/HDP-2.6.5/bk_security/content/ch_wire-kafka.html
+
+--security-protocol SASL_SSL
+When SASL_SSL is used, kerberos will be used for authentication and SSL will be used for wire encryption. As kerberos and SSL both will be used for authentication, all points discussed for protocol SASL_PLAINTEXT/PLAINTEXT and SSL above are applicable here.
+
+

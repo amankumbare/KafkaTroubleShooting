@@ -1,0 +1,53 @@
+What happens when a topic is deleted ?  
+When topic deletion is invoked through the kafka-topics.sh script, Kafka will create a znode as /admin/delete_topics/<topic_name>.  This will trigger a watch that invokes the deletion thread on this topic name.  The Marked for deletion status displayed within the output of the topic list command is based on the existence of this znode.
+
+Once the deletion thread is triggered, the necessary actions will be performed; however, the topic deletion can fail if any of the following conditions exist:
+
+a.  A broker hosting one of the replicas for that topic goes down 
+b.  There is a partition reassignment for partitions of that topic in progress 
+c.  There is a preferred replica election for partitions of that topic is in progress (though this is not strictly adhered to, since it holds the controller lock for the entire duration from start to end) 
+d.  The delete.topic.enable property is set to false
+
+Topic deletion should resume when the:
+a.  broker hosting the missing replica or replicas for that topic is started 
+b.  preferred replica election for partitions of that topic completes 
+c.  partition reassignment for partitions of that topic completes
+d.  delete.topic.enable property set to true and applied to cluster
+
+In some scenarios, the topic deletion process may abort and fail to recover.  In these scenarios, the topic becomes stuck in ‘Marked for deletion’ state.  For these situations, the last resort of using manual topic deletion is needed.
+
+How to Troubleshoot :
+
+1. First and foremost, double-check that the property delete.topic.enable is set to true and that the setting has been instantiated on the cluster.
+
+2. Check controller logs (delete-topics-thread) that provide more insights as to why topic is not deleted.
+
+3. Make sure that all brokers hosting partitions for that topic are up.  Also, make sure there is no partition reassignment operation happening during this time.  To check if a manual partition reassignment has been invoked and is running, check the following znode in zookeeper shell:
+/admin/reassign_partitions
+
+If all of the above have been checked and the deletion is still stuck, a last resort manual deletion of the topic is required.  The following is a list of steps to perform manual topic deletion for topic named ‘thistopic’:
+
+1.  Shut down all brokers
+
+2.  Clean up physical data on all brokers by moving out all folders associated with the topic from under the Kafka log.dir directory.
+
+For example, for kafka.log.dir=/grid1,/grid2, move out all of the following directories:
+/grid1/thistopic-<X>
+/grid2/thistopic-<X>
+where <X> is any number from 0 to (total partition count - 1).
+
+3.  Cleanup zookeeper data
+Login to zookeeper:
+/usr/hdp/current/zookeeper-client/bin/zkCli.sh -server <zk_fqdn>:<zk_port>
+Execute the following commands within zkCli.sh:
+NOTE:  For the following commands, assume ‘/’ as Kafka znode root.  If different, please prepend.
+zkcli>  ls /brokers/topics
+zkcli>  rmr /brokers/topics/thistopic
+
+zkcli>  ls /admin/delete_topics
+zkcli>  rmr /admin/delete_topics/thistopic
+
+zkcli>  ls /config/topics
+zkcli>  rmr /config/topics/thistopic
+
+4.  Restart brokers

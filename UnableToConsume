@@ -1,0 +1,144 @@
+1. Confirm which consumer API (old or new) to use.
+
+Old consumer api : When the old consumer API is used, the consumer group offsets are stored in zookeeper. As a result, the consumer will be pointed to the zookeeper server.
+ # /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh  --zookeeper zookeeper.example.com:2181 --from-beginning  --topic test 
+ 
+New consumer API: When the new consumer API is used, consumer group offsets are stored in brokers in an internal topic __consumer_offsets. In this case, the consumer will be pointed to brokers. 
+ # /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh  --bootstrap-server kafka.example.com:6667 --from-beginning  --topic test
+ 
+2. Check whether the node from which you are running consumer is able to communicate with the Kafka Brokers/Zookeeper Servers and that the appropriate port (based on consumer API) is being used.
+
+3. If new consumer API is used, confirm whether the __consumer_offsets topic is healthy or not. If not, the consumer will fail and issues related to __consumer_offsets will need to be fixed first.
+# /usr/hdp/current/kafka-broker/bin/kafka-topics.sh/kafka-topics.sh --describe --zookeeper  zookeeeper.example.com:2181 --topic __consumer_offsets
+
+4. Confirm whether a leader for the topic is elected by running a describe command on the topic from which messages are to be consumed:
+# /usr/hdp/current/kafka-broker/bin/kafka-topics.sh/kafka-topics.sh --describe --zookeeper  zookeeeper.example.com:2181 --topic <TopicName>
+
+5. Confirm whether the customer has enabled Ranger for authorization or not. If yes, IP based policies should be defined.
+Please refer below links to understand the working:
+
+https://community.hortonworks.com/articles/17059/apache-ranger-and-kafka-1.html
+https://cwiki.apache.org/confluence/display/RANGER/Kafka+Plugin#KafkaPlugin-AuthorizingKafkaaccessovernon-authenticatedchannelviaRanger
+
+Unable to consume in secured cluster :
+
+Provided below are the basic checks that need to be done :
+
+1. Confirm which consumer API (old or new) to use: 
+Old consumer API: When the old consumer API is used, the consumer group offsets are stored in zookeeper. As a result, the consumer will need to be pointed to the zookeeper servers.
+ # /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh  --zookeeper zookeepr.example.com:2181 --from-beginning  --topic test --security-protocol <PROTOCOL>
+ 
+New consumer api : When the new consumer API is used, the consumer group offsets are stored in brokers in an internal topic __consumer_offsets. In this case, the consumer will be pointed to the brokers. 
+ # /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh  --bootstrap-server kafka.example.com:6667  --from-beginning  --topic test --security-protocol <PROTOCOL>
+ 
+2. Check whether the node from which you are running consumer can communicate with the Kafka Brokers/Zookeeper Servers and that the appropriate port is used (based on consumer API being used).
+
+3. If new consumer API is used, confirm whether the __consumer_offsets topic is healthy or not; otherwise, the consumer will fail if not healthy. The customer will need to fix issues related to __consumer_offsets before attempting to use the new consumer API.
+# /usr/hdp/current/kafka-broker/bin/kafka-topics.sh/kafka-topics.sh --describe --zookeeper  zookeeeper.example.com:2181 --topic __consumer_offsets
+
+4. Run a describe command on topic to make sure that the leader is elected.
+# /usr/hdp/current/kafka-broker/bin/kafka-topics.sh/kafka-topics.sh --describe --zookeeper  zookeeeper.example.com:2181 --topic <TopicName> --security-protocol <PROTOCOL>
+
+
+If the above checks do not reveal the problem, debug this issue accordingly:
+
+--security-protocol PLAINTEXT :
+When a Kafka cluster is secured and the client is using PLAINTEXT protocol in order to consume message, there is a catch in this case. The catch is that every request is sent as the anonymous user. So if a cluster is secured, make sure that the anonymous user has access to consume messages from the topic based on the type of authorizer that is configured.
+
+If Kafka ACLs are used for authorization:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=`hostname -f`:2181 --add --allow-principal User:Anonymous --consumer --topic <TopicName> --group <consumer-group-name>
+
+For example :
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=`hostname -f`:2181 --add --allow-principal User:Anonymous --consumer --topic HPtest --group console-consumer-60008
+
+If Ranger is used for authorization, give the anonymous user the permission to consume and describe the topic
+
+--security-protocol SASL_PLAINTEXT / PLAINTEXTSASL : 
+There are instances where the client will throw a generic error that doesn't let us know what is going wrong. To tackle such conditions, we can do below checks:
+
+1. Make sure kerberos client is installed on the node.
+
+2. Check if you can obtain a ticket from the principal:
+If you want to obtain TGT using password:
+# kinit <principalName> 
+
+If you are using keytab, check whether the user has permission to read the keytab:
+Using keytab:
+# kinit -kt /Path/to/Keytab <PrincipalName> 
+
+3. Confirm whether or not a ticket in the ticket cache is expired:
+# klist 
+
+4. Confirm whether the user has read permission on JAAS file which is used.
+
+5. Confirm whether the client can communicate to the Kafka Broker/Zookeeper Server and that the port used is the same one on which the broker is listening:
+# ping <broker.hostname>
+# telnet zookeeper.example.com:port
+# telnet  broker.hostname:port 
+
+6. Check whether the expected security protocol --security-protocol that is specified on the client side is the same as the configured security protocol that is specified in the server.properties on broker.
+
+7. Try exporting JAAS file shell variable and run consumer again :
+# export KAFKA_CLIENT_KERBEROS_PARAMS="-Djava.security.auth.login.config=/Path/to/Jaas/File" 
+
+In order to enable debug for kerberos:
+# export KAFKA_CLIENT_KERBEROS_PARAMS="-Djava.security.auth.login.config=/Path/to/Jaas/File -Dsun.security.krb5.debug=true" 
+
+8. If you are still facing an authentication issue, try enabling debug for console-consumer on the Kafka client node: 
+# vim /usr/hdp/current/kafka-broker/config/tools-log4j.properties 
+log4j.rootLogger=DEBUG, stderr 
+In the resulting debug log entries, one should see the principal and security protocol used and to which broker the request is being sent.
+
+9. Once you confirm that authentication is working fine, it's time for you to confirm whether the user has the required permission on the topic. 
+If Kafka is configured to use Kafka ACLs (For information on Kafka ACLs:  https://cwiki.apache.org/confluence/display/KAFKA/Kafka+Authorization+Command+Line+Interface)
+
+To list ACLs:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh  --list --topic <TOPIC> --authorizer-properties zookeeper.connect=`hostname -f`:2181
+For example:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh  --list --topic Test-Topic --authorizer-properties zookeeper.connect=`hostname -f`:2181
+
+To allow a user to consume messages from topic:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=`hostname -f`:2181 --add --allow-principal User:<USER> --consumer --topic <TopicName> --group <consumer-group-name>
+For example:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=`hostname -f`:2181 --add --allow-principal User:j34test --consumer --topic HPtest --group console-consumer-60008
+
+If kafka is configured to use ranger, make sure that there is a policy defined for the topic and the principal.
+
+10. There are scenarios where, even though one has given policies for the correct user, still the consumer fails with the UNKNOWN_TOPIC error.
+
+One important point to note is that Kafka uses its own auth to local rules for converting kerberos principals to usernames. 
+In such cases, check auth to local rules for Kafka and confirm whether there is a matching rule defined for the kerberos principal (specifically realm) in question. If the required auth to local rule is not present, the kerberos principal is passed as a user to ranger/Kafka authorizer and it gets denied.
+
+For Kafka Authorizer:
+To confirm this behavior, make the below changes to the log4j properties to enable debug logging and then check the entries in the kafka-authorizer.log file:
+To enable debug log for authorization without ranger:
+log4j.logger.kafka.authorizer.logger=DEBUG, authorizerAppender
+
+For Ranger Authorizer:
+To confirm this behavior, check the entries in the Ranger audit system.
+If audits are not working, you will need to enable debug logging for ranger_kafka.log by making the below changes to log4j:
+To enable debug for authorization with Ranger:
+log4j.logger.org.apache.ranger=DEBUG, rangerAppender
+
+ --security-protocol SSL
+1. Based on the configuration of the clientAuth property, the client will decide if there would two-way authentication or one-way authentication using SSL.
+2. If clientAuth is set to required, then make sure that the consumer.properites file contains the following entries:
+client keystore
+key password
+keystore password
+truststore
+truststore password
+
+In order to make two way authentication work, make sure CA of the Kafka brokers is present in the client truststore and the CA of client is present in the Kafka truststore.
+Note: Make sure ExtendedKeyUsages should have serverAuth and clientAuth in server and client certificates:
+
+#6: ObjectId: 2.5.29.37 Criticality=false 
+ExtendedKeyUsages [ 
+serverAuth 
+clientAuth
+
+3. If clientAuth is set to none/requested, then only truststore and truststore password are required in the consumer.properties file.
+
+ --security-protocol SASL_SSL
+When SASL_SSL is used, kerberos will be used for authentication while SSL will be used for wire encryption. As kerberos and SSL both will be used for authentication, all points discussed above for protocol SASL_PLAINTEXT/PLAINTEXT and SSL are applicable here.
+

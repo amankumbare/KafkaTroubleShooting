@@ -1,0 +1,11 @@
+Topic creation issue in unsecured cluster:
+Generally, there are no issues when creating topics on unsecured clusters, since all users have full access. Make sure that the replication factor number set for the topic does not exceed the number of available brokers in the Kafka cluster.
+
+Topic creation issues in secured cluster: 
+Make sure that the replication factor number set for the topic does not exceed the number of available brokers in the Kafka cluster.
+In earlier versions of Kafka, if topic is created as any other user than the kafka user, then the Leader will not be elected for topic. 
+Reference : https://community.hortonworks.com/questions/79093/problem-of-creating-topics-in-kafka-with-kerberos.html
+This issue is now fixed in latest versions when kafka-topic.sh script is called, it internally uses the kafka_jaas.conf file for authentication.
+
+To understand kerberos integration with Kafka, refer to: https://community.hortonworks.com/articles/208634/troubleshooting-kerberos-issues-in-kafka-for-produ.html
+
