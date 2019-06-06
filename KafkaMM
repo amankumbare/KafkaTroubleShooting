@@ -1,0 +1,74 @@
+Generally Mirror Maker is recommended to run on destination cluster. In unsecured environment we don't see much issues. Incase of any issues while running mirror maker we can check below points:
+
+Issues in MirrorMaker can be categorized in two parts:
+While Consuming messages from source Kafka cluster
+  This can be divided in to two further categories based on the consumer API used 
+  - New consumer API
+  - Old consumer API
+
+While Producing messages from destination Kafka Cluster
+
+Troubleshooting MM while consuming messages :
+1. Make sure the node which is running mirror maker can communicate Kafka brokers, zookeeper server and port on source cluster based on consumer api used:
+  - If old consumer api is used make sure it can connect to zookeeper server and 2181 port
+  - If new consumer api is used confirm it can connect to broker (on source cluster)  and port on which its listening
+
+2. Run a describe command on topic/topics to confirm if leader is elected.
+$ /usr/hdp/current/kafka-broker/bin/kafka-topics.sh/kafka-topics.sh --describe --zookeeper  zookeeeper.example.com:2181 --topic <TopicName>
+Topic: <TopicName> Partition: 0 Leader: 1001 Replicas: 1001,1002,1003 Isr: 1001,1002,1003
+
+Note : Zookeeper of source cluster 
+
+If there are issues with topic from which MM is consuming check server.log and controller.log for any errors related to it on Source Kafka cluster and fix those.
+
+3. Try running console consumer on the node where Mirror Maker is running to check if messages can be consumed or not. If you are unable to consume, try enabling debug:
+# vim /usr/hdp/current/kafka-broker/config/tools-log4j.properties
+Within this properties file make sure the following parameters are set:
+log4j.rootLogger=DEBUG, stderr
+
+Run console-consumer again and analyze debug logs for any issues.  
+
+Note : If new consumer api is used check of __consumer_offsets topic is healthy or not by running a describe command:
+$ /usr/hdp/current/kafka-broker/bin/kafka-topics.sh/kafka-topics.sh --describe --zookeeper  zookeeeper.example.com:2181 --topic __consumer_offsets
+Note : Zookeeper of source cluster 
+
+If there are issues while consuming messages, please refer to the "Unable to consume from Kafka topic" stage to troubleshoot this issue.
+Note : If you want to use new consumer API you need to use brokers located on the source cluster. 
+
+4. Confirm that Ranger is enabled for authorization or not while authentication is disabled (on source cluster)? If this is the case, then IP based policies should be defined.
+Please refer below links to understand the working:
+https://community.hortonworks.com/articles/17059/apache-ranger-and-kafka-1.html
+https://cwiki.apache.org/confluence/display/RANGER/Kafka+Plugin#KafkaPlugin-AuthorizingKafkaaccessovernon-authenticatedchannelviaRanger
+
+
+Troubleshooting MM while producing messages:
+While running MM, one can either create a Kafka topic on the destination cluster before running MirrorMaker while providing the partitions and replication factor information or let MM auto create the topic. One point to note is that partition and replication factor settings for auto created topic will be based on the default configured values in Kafka configurations. When one uses this approach, the topic on the destination cluster will not be created until messages are produced on the source cluster Kafka topic.
+
+1. Check if topic is created or not by doing a list:
+# /usr/hdp/current/kafka-broker/bin/kafka-topics.sh --list --zookeeper zookeeeper.example.com:2181 
+Note : Zookeeper of Destination cluster 
+
+2. Execute describe command to confirm if leader is elected:
+# /usr/hdp/current/kafka-broker/bin/kafka-topics.sh/kafka-topics.sh --describe --zookeeper  zookeeeper.example.com:2181 --topic <TopicName>
+Note : Zookeeper of Destination cluster 
+
+3. Try running console-producer on the node where Mirror Maker is running to check if messages can be consumed or not.  If you are unable to  produce, try enabling debug:
+# vim /usr/hdp/current/kafka-broker/config/tools-log4j.properties 
+
+Within the properties file, make sure the following entry is included:
+log4j.rootLogger=DEBUG, stderr
+Run the console-producer again and analyze the debug logs for any issues.  
+
+If there are issues while consuming messages, please refer the "Unable to produce to Kafka topic" stage to troubleshoot this issue.
+
+4. Determine whether the customer has enabled Ranger for authorization or not while authentication is disabled on the destination cluster. If so, the IP based policies should be defined.
+Please refer below links to understand the working:
+https://community.hortonworks.com/articles/17059/apache-ranger-and-kafka-1.html
+https://cwiki.apache.org/confluence/display/RANGER/Kafka+Plugin#KafkaPlugin-AuthorizingKafkaaccessovernon-authenticatedchannelviaRanger
+
+Configure Kafka Mirror Maker using old consumer and producer APIs in an unsecured environment: 
+https://support.hortonworks.com/s/article/Set-up-Kafka-MirrorMaker
+Configure Kafka Mirror Maker using new consumer and producer APIs in an unsecured environment: 
+https://community.hortonworks.com/content/supportkb/188086/how-to-configure-kafka-mirror-maker-using-new-cons.html
+Mirror Maker Best Practices: https://community.hortonworks.com/articles/79891/kafka-mirror-maker-best-practices.html
+

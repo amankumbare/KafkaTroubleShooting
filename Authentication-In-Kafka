@@ -1,0 +1,138 @@
+Types of communication which takes place in Kafka :
+Between brokers in Kafka Cluster
+Between Client and Kafka broker
+Between broker and zookeeper
+
+In Kafka, its important to understand the different authentication mechanisms available. One can use different authentication mechanisms for different communications. 
+
+Types of Authentication Mechanism available :
+GSSAPI (kerberos)
+
+For GSSAPI (kerberos) mechanism there are two types of security protocol available for authentication :
+SASL_PLAINTEXT / PLAINTEXTSASL
+SASL_SSL
+
+======================================
+PROTOCOLS              |     KERBEROS      |      SSL       |
+======================================   
+PLAINTEXT                /             no             /     no          /
+PLAINTEXTSASL      /              yes           /      no         /
+SSL                           /              no             /      yes       /
+SASL_SSL                /              yes           /       yes      /
+======================================
+
+GSSAPI is the mechanism that is used by customers most often. So let's see few important parameters related to this mechanism:
+
+One needs to configure the listener property to specify which IP and port the Kafka process will be listening on. A different port can be specified for different protocols.
+
+For an example:
+listeners=PLAINTEXT://localhost:6667, PLAINTEXTSASL://localhost:6668, SASL_SSL://localhost:6669
+
+The advertised.listeners parameter should be used to define the IP and port that the Kafka process will be listening on. This IP and port combination is used by clients connecting to the Kafka brokers.
+
+PLAIN
+If you use PLAIN mechanism, you need to configure username and password in JAAS file for authentication. 
+
+SCRAM
+
+GSSAPI and PLAIN are the SASL mechanism that are used most often.
+
+For the types of communication available in Kafka, one can configure different authentication mechanisms. Let's discuss how to configured it: 
+
+Communication between brokers in Kafka cluster:
+
+Before brokers can communicate between themselves, each broker has to authenticate. 
+
+The sasl.mechanism.inter.broker.protocol parameter in the server.properties file will be used to determine which method/mechanism is used for authentication between brokers.  It can be PLAIN, SCRAM, or GSSAPI.  Generally with Kerberos, it will be GSSAPI.
+
+Depending on the value of sasl.mechanism.inter.broker.protocol used by the listener, you can configure which security protocol should be used for authentication. 
+
+The security.inter.broker.protocol parameter is used to define which protocol to use for authentication between brokers. It can be any one of the protocol which is configured in listener property.
+
+For example:
+security.inter.broker.protocol=PLAINTEXTSASL
+ 
+If sasl.mechanism.inter.broker.protocol is set to GSSAPI and security.inter.broker.protocol is set to SASL_PLAINTEXT / PLAINTEXTSASL, then Kafka brokers will use JAAS file to get kerberos TGT. 
+
+From inter broker communication, a JAAS file used is kafka_jaas.conf. Let's discuss about kafka_jaas.conf. This file will be used for authentication when a broker in a cluster tries to communicate with other brokers in cluster. Take a look at the content and understand its purpose:
+
+KafkaServer { 
+com.sun.security.auth.module.Krb5LoginModule required
+useKeyTab=true
+keyTab="/etc/security/keytabs/kafka.service.keytab"        
+storeKey=true        
+useTicketCache=false        
+serviceName="kafka"        
+principal="kafka/c6401.ambari.apache.org@EXAMPLE.COM";
+}; 
+In the above example, the KafkaServer section will be used by the broker for authentication when it tries to communicate with other brokers in cluster. It should always be configured to use keytab and principal.
+
+Value of serviceName should be the principal of the running Kafka process.
+
+Client section in kafka_jaas.conf will be used for authentication when the broker wants to communicate with zookeeper. It should always be configured to use keytab and principal.
+
+The value of serviceName should be the principal as which zookeeper service is running.
+Client { // used for zookeeper connection
+com.sun.security.auth.module.Krb5LoginModule required       
+useKeyTab=true        
+keyTab="/etc/security/keytabs/kafka.service.keytab"        
+storeKey=true       
+useTicketCache=false        
+serviceName="zookeeper"        
+principal="kafka/c6401.ambari.apache.org@EXAMPLE.COM";
+}; 
+
+
+storeKey=true 
+
+Please read about the significance of setting the storekey parameter to true in jaas.conf.
+
+Communication between client and Kafka broker
+
+For communication between client and broker, one can define a list of supported SASL mechanism for authentication using the property named sasl.enabled.mechanism which is a server side configuration. 
+
+In Kafka configurations, one can define a list of supported mechanisms:
+sasl.enabled.mechanisms=SCRAM,PLAIN,GSSAPI
+
+The sasl.mechanism parameter is a client side property that can select any one of the list of supported SASL mechanisms by broker defined by property sasl.enabled.mechanism. 
+
+By default, the value of sasl.mechanism is GSSAPI
+
+If the client selects GSSAPI as authentication mechanism, then the next step is to choose security protocol. It can use any one of the configured security protocols specified in the advertised.listener parameter.
+
+Let's consider an example where a client is configured to use sasl.mechanism as GSSAPI, with security protocol PLAINTEXTSASL / SASL_PLAINTEXT. The client will use a JAAS file to get a Kerberos TGT.
+
+The kafka_client_jaas.conf file will be used by clients (producer or consumer) to authenticate to the Kafka broker. The kafka_client_jaas.conf file has two sections that need to be taken into account:
+
+KafkaClient {      
+com.sun.security.auth.module.Krb5LoginModule required      
+useTicketCache=true      
+renewTicket=true      
+serviceName="kafka";     
+}; 
+
+Client {
+com.sun.security.auth.module.Krb5LoginModule required      
+useTicketCache=true      
+renewTicket=true      
+serviceName="zookeeper";
+}; 
+KafkaClient section: As the name suggest it will be used when client wants to communicate to broker.
+
+The value of serviceName should be the principal of the the Kafka broker process. You can configure it to use ticket cache or keytab and principal.
+
+Client : This part of JAAS file is only used by clients that use the old consumer API. With the old consumer API, consumers need to connect to zookeeper.
+
+With the new consumer API clients, they communicate to brokers instead of zookeeper; hence, while authenticating, it will use KafkaClient section in the kafka_client_jaas.conf file.
+
+Producers will always use the KafkaClient section in the kafka_client_jaas.conf file, since it will send requests directly to the brokers.
+
+For long running Kafka clients, it recommended to configure JAAS file to use keytab and principal. Please refer below example:
+KafkaClient {      
+com.sun.security.auth.module.Krb5LoginModule required      
+useKeyTab=true      
+keyTab="/etc/security/keytabs/storm.service.keytab"      
+storeKey=trueuseTicketCache=false     
+serviceName="kafka"    
+principal="storm@EXAMPLE.COM";
+};

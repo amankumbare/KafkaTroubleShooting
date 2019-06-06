@@ -1,0 +1,48 @@
+n some of the cases, customer wants to use IBM JDK on their secured Kafka cluster. When IBM java is used, there is a different way to configure the JAAS file:
+
+In java producer/consumer, specify the service name in the application code:
+
+Sample code for producer:
+Map<String, Object> producerConfig = new HashMap<>();
+producerConfig.put("sasl.kerberos.service.name","kafka");
+System.setProperty("java.security.krb5.conf", "/www/properties/kerberos/krb5.conf");
+
+Sample code for consumer:
+Map<String, Object> ConsumerConfig = new HashMap<>();
+ConsumerConfig.put("sasl.kerberos.service.name","kafka");
+System.setProperty("java.security.krb5.conf", "/www/properties/kerberos/krb5.conf");
+
+Create the JAAS file for IBM Java with this structure:
+KafkaClient { 
+com.ibm.security.auth.module.Krb5LoginModule required 
+debug=true 
+credsType=both 
+useKeytab="/Path/To/Keytab" 
+principal="<Principal>"; 
+}; 
+
+Client { 
+com.ibm.security.auth.module.Krb5LoginModule required 
+debug=true 
+credsType=both 
+useKeytab="/Path/To/Keytab"  
+principal="<Principal>"
+}; 
+
+For example:
+KafkaClient { 
+com.ibm.security.auth.module.Krb5LoginModule required 
+debug=true 
+credsType=both 
+useKeytab="/etc/security/keytabs/testuser.keytab" 
+principal="testuser@HWX.COM"; 
+}; 
+
+Client { 
+com.ibm.security.auth.module.Krb5LoginModule required 
+debug=true 
+credsType=both 
+useKeytab="/etc/security/keytabs/testuser.keytab" 
+principal="testuser@HWX.COM"; 
+}; 
+

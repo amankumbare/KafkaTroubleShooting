@@ -1,0 +1,85 @@
+In Kafka, there are two types of authorizers available:
+Kafka ACLs
+Ranger
+
+Kafka ACLs:
+When Kerberos is enabled on a cluster, the default authorizer available is Kafka ACLs. Kafka ACLs are defined in the general format of "Principal P is [Allowed/Denied] Operation O From Host H On Resource R".
+Note: Kafka ACLs can only be modified by the kafka user.
+
+To list ACLs for a topic:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh  --list --topic <TOPIC> --authorizer-properties zookeeper.connect=`zookeeper.example.com`:2181
+For example:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh  --list --topic Test1 --authorizer-properties zookeeper.connect=`zookeeper.example.com`:2181
+
+1. When kerberos is enabled, the security protocol that is used is PLAINTEXT when using Kafka ACLs for authorization:
+In this case Kafka, can’t assert the identity of client user over a non-secure channel. Thus, Kafka treats all users for such access as an anonymous user (a special user literally named Anonymous). 
+
+In order to allow the anonymous user to produce to topic, the following syntax is necessary:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=zookeeper.example.com:2181 --add --allow-principal User:Anonymous --producer --topic <TOPIC>
+For example: 
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=zookeeper.example.com:2181 --add --allow-principal User:Anonymous --producer --topic Test1
+
+In order to allow the Anonymous user to consume messages from topic, the following syntax is necessary:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=zookeeper.example.com:2181 --add --allow-principal User:Anonymous --consumer --topic <TOPIC> --group <UNIQUE_GROUP_NAME>
+For example : 
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=zookeeper.example.com:2181 --add --allow-principal User:Anonymous --consumer --topic <TOPIC> --group consumergroup-test
+
+2. When Kerberos is enabled, the security protocol that is used is SASL_PLAINTEXT/PLAINTEXTSASL/SASL_SSL with Kafka ACLs for authorization:
+Allow Anonymous user to produce to topic:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=zookeeper.example.com:2181 --add --allow-principal User:<USERNAME> --producer --topic <TOPIC>
+For example:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=zookeeper.example.com:2181 --add --allow-principal User:jr454d --producer --topic Test1
+
+In order to allow a specific user to consume messages from topic, the following syntax is necessary:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=zookeeper.example.com:2181 --add --allow-principal User:<USERNAME> --consumer --topic <TOPIC> --group <UNIQUE_GROUP_NAME>
+For example:
+# /usr/hdp/current/kafka-broker/bin/kafka-acls.sh --authorizer kafka.security.auth.SimpleAclAuthorizer --authorizer-properties zookeeper.connect=slpd635.sddc.sbc.com:2181 --add --allow-principal User:jr454d --consumer --topic hdptest --group consumergroup-test
+
+There are scenarios where even though the correct policy has been used, the producer still fails with an UNKNOWN_TOPIC error.
+One important point to note is that Kafka uses it own auth to local rules for converting kerberos principals to usernames. 
+In such cases, check the auth to local rules for Kafka and confirm whether there is a matching rule defined for the kerberos principal (specifically realm) in question. If the required auth to local rule is not present, the kerberos principal is passed as the user to Kafka ACLs and gets denied.
+
+To confirm whether this behavior is happening, check the logs in the kafka-authorizer.log log file.  In some cases you will need to enable debug logging. In order to enable debug logging, make below changes in log4j:
+To enable debug log for authorization without ranger make below changes in log4j:
+log4j.logger.kafka.authorizer.logger=DEBUG, authorizerAppender
+
+Ranger Authorizer:
+There are some use cases where customers don't want to use Kerberos for authentication but instead want to use Ranger for authorization. In such s acenario, there are few items that need to be taken into consideration which are explained in below links:
+https://community.hortonworks.com/articles/17059/apache-ranger-and-kafka-1.html
+https://cwiki.apache.org/confluence/display/RANGER/Kafka+Plugin#KafkaPlugin-AuthorizingKafkaaccessovernon-authenticatedchannelviaRanger 
+
+If authentication is enabled for Kafka, check if policy is defined for a user.
+Confirm if policies are getting synced by checking the JSON file in /etc/ranger/<repo_name_for_kafka>/policycache/ directory on the Kafka broker node.
+For any issues related to policy synchronization, check the ranger_kafka.log file.
+
+Here are a few scenarios, when Ranger is enabled for Kafka, based on the type of security protocol one is using:
+
+1. When kerberos is not enabled for authentication, the security protocol used is PLAINTEXT for Ranger authorization:
+In this case, Kafka can’t assert the identity of client user over a non-secure channel. Thus, Kafka treats all users for such access as an anonymous user (a special user literally named Anonymous). Make sure that the required policy is defined for the Anonymous user.
+
+2. When Kerberos is enabled for authentication, the security protocol used is SASL_PLAINTEXT/PLAINTEXTSASL/SASL_SSL with Ranger for authorization:
+There are scenarios where even though one has given policies for the correct user that producer still fails with an UNKNOWN_TOPIC error.
+- One important point to note is Kafka uses it own auth to local rules for converting kerberos principals to usernames. 
+- In such cases check auth to local rules for Kafka and confirm if there is a matching rule defined for the kerberos principal (specifically realm) in question. If required auth to local rule is not present kerberos principal is passed as user to ranger and gets denied.
+
+To confirm this behavior check audits in ranger.
+If audits are not working, one needs to enable debug for ranger_kafka.log by making below changes in log4j :
+
+To enable debug for authorization with Ranger make below changes in log4j :
+log4j.logger.org.apache.ranger=DEBUG, rangerAppender
+
+3. When SSL is enabled for authentication and ranger :
+Based on clientAuth one needs to define policies in ranger. If clientAuth is set to required then DN of client cert DN is used as username. So policies in ranger should be defined for DN of client cert. 
+
+Note : Make sure  the ExtendedKeyUsages parameter has serverAuth and clientAuth included in both server and client certificates.
+#6: ObjectId: 2.5.29.37 Criticality=false 
+ExtendedKeyUsages [ 
+serverAuth 
+clientAuth
+
+If clientAuth is set to none, then the policy should be defined for the Anonymous user.
+
+Note : In order to create/delete topics ranger policies are not taken into consideration. There is an RMP raised for this feature https://hortonworks.jira.com/browse/RMP-9555
+
+Note : Ranger/Kafka ACLs are case sensitive, so user names should be the same as defined in Ranger policies/Kafka ACLs.
+

@@ -1,0 +1,137 @@
+Receiving a new Kerberos ticket before you perform any of the below commands:
+Perform a klist to get principal name:
+$ klist -kte /etc/security/keytabs/kafka.service.keytab
+Perform a kinit as the kafka user:
+$ kinit -kt /etc/security/keytabs/kafka.service.keytab kafka/c4110-node2.experiment.com
+Be sure to export the KAFKA_CLIENT_KERBEROS_PARAMS shell variable definition for the client JAAS file used for Kerberos authentication and to supply the appropriate security protocol on the console producer command line:
+Syntax:
+$ export KAFKA_CLIENT_KERBEROS_PARAMS="-Djava.security.auth.login.config=/Path/To/JAAS/File"
+Example:
+$ export KAFKA_CLIENT_KERBEROS_PARAMS="-Djava.security.auth.login.config=/usr/hdp/current/kafka-broker/config/kafka_client_jaas.conf"
+NOTE: Be sure to perform the above steps prior to attempting any of the commands below
+
+
+1. Topic Creation:
+Syntax:
+$ /usr/hdp/current/kafka-broker/bin/kafka-topics.sh --create --zookeeper <zookeeper-fqdn>:2181 --replication-factor <replication-factor> --partitions <partitions> --topic <topic-name>
+Example topic creation for a topic named Test with replication factor 1 and number of partitions explicitly set to 2:
+$ /usr/hdp/current/kafka-broker/bin/kafka-topics.sh --create --zookeeper `hostname -f`:2181 --replication-factor 1 --partitions 2 --topic Test
+Note : number of replication factor cannot be greater than number of brokers.
+
+
+2. Run Describe command on topic:
+Syntax: 
+$ /usr/hdp/current/kafka-broker/bin/kafka-topics.sh --describe --zookeeper <zookeeper-fqdn>:2181 --topic <Topic-Name>
+Example for a topic named Test:
+$ /usr/hdp/current/kafka-broker/bin/kafka-topics.sh --describe --zookeeper `hostname -f`:2181 --topic Test
+ Topic:Test PartitionCount:2 ReplicationFactor:1 Configs:
+ Topic: Test Partition: 0 Leader: 1001 Replicas: 1001 Isr: 1001
+ Topic: Test Partition: 1 Leader: 1001 Replicas: 1001 Isr: 1001
+
+3. Run console producer 
+Syntax:
+$ /usr/hdp/current/kafka-broker/bin/kafka-console-producer.sh --broker-list <broker-fqdn>:6667 --topic <Topic-Name> --security-protocol <SECURITY_PROTOCOL>
+Example of using security protocol PLAINTEXTSASL
+$ /usr/hdp/current/kafka-broker/bin/kafka-console-producer.sh --broker-list `hostname -f`:6667 --topic Test --security-protocol PLAINTEXTSASL
+
+Note : Make sure protocol and port used is correct by checking server.properties file 
+
+
+4. Run console consumer 
+There are two types of consumer APIs available: 
+
+Old Consumer API syntax:
+$ /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh --zookeeper <zookeeper-fqdn>:2181 --from-beginning --topic <Topic-Name> --from-beginning --security-protocol <SECURITY_PROTOCOL>
+Example:
+$ /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh --zookeeper `hostname -f`:2181 --from-beginning --topic Test --from-beginning --security-protocol PLAINTEXTSASL
+
+New Consumer API syntax:
+$ /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh --bootstrap-server <kafka-broker-fqdn>:6667 --security-protocol <SECURITY_PROTOCOL> --topic <Topic-Name> --from-beginning
+Example:
+$ /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh --bootstrap-server `hostname -f`:6667 --security-protocol PLAINTEXTSASL --topic Test --from-beginning
+
+Note : Make sure protocol and port used is correct by checking server.properties file 
+
+5.  New Consumer
+
+5a. Two examples of listing consumer groups:
+$ cat test.properties
+security.protocol=PLAINTEXTSASL
+
+$ /usr/hdp/current/kafka-broker/bin/kafka-consumer-groups.sh  --new-consumer --bootstrap-server `hostname -f`:6667 --list --command-config test.properties
+or
+$ /usr/hdp/current/kafka-broker/bin/kafka-consumer-groups.sh  --new-consumer --bootstrap-server `hostname -f`:6667 --list --security-protocol PLAINTEXTSASL
+
+5b. Two examples of describing consumer groups  
+$ cat test.properties
+security.protocol=PLAINTEXTSASL
+
+$ /usr/hdp/current/kafka-broker/bin/kafka-consumer-groups.sh  --new-consumer --bootstrap-server `hostname -f`:6667 --describe --group <group-name> --command-config test.properties
+or
+$ /usr/hdp/current/kafka-broker/bin/kafka-consumer-groups.sh  --new-consumer --bootstrap-server `hostname -f`:6667 --describe --group <group-name> --security-protocol PLAINTEXTSASL
+Note : Make sure protocol and port used is correct by checking server.properties file 
+
+
+6. Old Consumer 
+
+6a. Two examples of listing consumer groups:
+$ cat test.properties
+security.protocol=PLAINTEXTSASL
+
+$ /usr/hdp/current/kafka-broker/bin/kafka-consumer-groups.sh/kafka-consumer-groups.sh  --zookeeper `hostname -f`:2181 --list --command-config /home/kafka/test.properties
+or
+$ /usr/hdp/current/kafka-broker/bin//kafka-consumer-groups.sh --zookeeper `hostname -f`:2181 --list  --security-protocol PLAINTEXTSASL
+ 
+6b. Two examples of describing consumer groups:
+$ cat test.properties
+security.protocol=PLAINTEXTSASL
+
+$ /usr/hdp/current/kafka-broker/bin/kafka-consumer-groups.sh  --zookeeper `hostname -f`:2181 --describe --group <group-name> --command-config /home/kafka/test.properties
+or
+$ /usr/hdp/current/kafka-broker/bin//kafka-consumer-groups.sh --zookeeper `hostname -f`:2181 --describe --group  <group-name> --security-protocol PLAINTEXTSASL
+Note : Make sure protocol and port used is correct by checking server.properties file 
+
+
+7. To display the total number of messages in Kafka log file:
+Syntax:
+$ /usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.DumpLogSegments --deep-iteration --files <kafka-logs-directory>/<Topic>-<Partiton-ID>/<log-file-name>.log
+Example:
+$ /usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.DumpLogSegments --deep-iteration --files /kafka-logs/Test-1/00000000000000000000.log
+Dumping /kafka-logs/Test-1/00000000000000000000.log
+Starting offset: 0
+offset: 0 position: 0 CreateTime: 1535971618597 isvalid: true payloadsize: 3 magic: 1 compresscodec: NoCompressionCodec crc: 2156599216
+offset: 1 position: 37 CreateTime: 1535972452343 isvalid: true payloadsize: 7 magic: 1 compresscodec: NoCompressionCodec crc: 3793024083
+.
+.
+.
+offset: 62 position: 2227 CreateTime: 1535972472454 isvalid: true payloadsize: 2 magic: 1 compresscodec: NoCompressionCodec crc: 3980748776
+offset: 63 position: 2263 CreateTime: 1535972472773 isvalid: true payloadsize: 1 magic: 1 compresscodec: NoCompressionCodec crc: 1839237223
+Note : Make sure protocol and port used is correct by checking server.properties file 
+
+
+8. To check last message in partition log:
+Syntax:
+$ /usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list <kafka-broker-fqdn>:6667 --topic <Topic-Name> --time -1 --security-protocol PLAINTEXTSASL
+Example:
+$ /usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list `hostname -f`:6667 --topic Test --time -1 --security-protocol PLAINTEXTSASL
+Test:1:64
+Test:0:65
+Note : Make sure protocol and port used is correct by checking server.properties file 
+
+
+9. To check first offset of log:
+Syntax:
+$ /usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list <kafka-broker-fqdn>:6667 --topic <Topic-Name> --time -2 --security-protocol PLAINTEXTSASL
+Example:
+$ /usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.GetOffsetShell --broker-list `hostname -f`:6667 --topic Test --time -2 --security-protocol PLAINTEXTSASL
+Test:1:0
+Test:0:0
+Note : Make sure protocol and port used is correct by checking server.properties file 
+
+
+10. To print offset information along with payload:
+Syntax:
+$ /usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.DumpLogSegments --deep-iteration --files <kafka-logs-directory>/<Topic>-<Partition>/<log-file-name>.log --print-data-log
+Example:
+$ /usr/hdp/current/kafka-broker/bin/kafka-run-class.sh kafka.tools.DumpLogSegments --deep-iteration --files /kafka-logs/Test-0/00000000000000000000.log --print-data-log
+

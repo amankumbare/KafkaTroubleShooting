@@ -1,0 +1,68 @@
+First understand which is the source cluster and which is the destination cluster. From there, determine security protocols and topics being used. These items need to be kept in mind when troubleshooting MM issues.
+
+For consumer related issues:
+
+Confirm the consumer API (new or old) that is in use.
+ 
+Old consumer API: When the old consumer API is used, the consumer group offsets are stored in zookeeper. As a result, the consumer side will be pointed to zookeeper servers.
+
+To consume:
+$ /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh  --zookeeper zookeepr.example.com:2181  --consumer.config  /etc/kafka/conf/consumer.properties --from-beginning  --topic test 
+ 
+To describe consumer group:
+$ /usr/hdp/current/kafka-broker/bin/kafka-consumer-groups.sh --zookeeper zookeepr.example.com:2181 --group <Consumer-group> --describe --security-protocol <SECURITY-PROTOCOL>
+
+ New consumer API: When new consumer API is used, the consumer group offsets are stored on the brokers in an internal topics with names that begin with __consumer_offsets. The consumer in this case will be pointed to brokers.
+
+To consume:
+$ /usr/hdp/current/kafka-broker/bin/kafka-console-consumer.sh  --bootstrap-server kafka.example.com:6667  --consumer.config  /etc/kafka/conf/consumer.properties --from-beginning  --topic test
+ 
+To describe the consumer group :
+$ /usr/hdp/current/kafka-broker/bin/kafka-consumer-groups.sh --bootstrap-server kakfa.example.com:6667 --group <Consumer-group> --describe --security-protocol <SECURITY-PROTOCOL>
+ 
+
+Check consumer properties file to confirm if consumer is pointed to zookeeper or brokers of source cluster.
+
+Examples of sample consumer configurations:
+
+For the old consumer API:
+zookeeper.connect=kafka-source-server1:6667,kafka-source-server2:6667,kafka-source-server3-6667
+groupid=dp-MirrorMaker-group
+exclude.internal.topics=true
+mirror.topics.whitelist=app_log
+client.id=mirror_maker_consumer
+security.protocol=SASL_PLAINTEXT
+ 
+For the new consumer API:
+bootstrap.servers=kafka-source-server1:6667,kafka-source-server2:6667,kafka-source-server3-6667
+groupid=dp-MirrorMaker-group
+exclude.internal.topics=true
+mirror.topics.whitelist=app_log
+client.id=mirror_maker_consumer
+security.protocol=SASL_PLAINTEXT
+
+Which security protocol is used?
+Try running console-consumer from the node where MM is running using collected information. See if you are able to consume or not. If not, then please refer "Unable to consume messages from topic" stage to trouble shoot this issue. 
+ 
+For producer related issues:
+Which security protocol is being used?
+Check the producer properties file to confirm that the producer is pointed to the brokers on the destination cluster:
+bootstrap.servers=kafka-target-server1:6667,kafka-target-server2:6667,kafka-target-server3-6667
+acks=1
+batch.size=100
+client.id=mirror_maker_producer
+security.protocol=SASL_PLAINTEXT
+
+Try running console-producer from the node where MM is running. If you are unable to produce messages there, please refer stage "Unable to produce messages to topic".
+
+Points to remember:
+ 
+If kerberos is used for authentication, one cannot use two different principals for producer and consumer respectively. In order to get a TGT, you have to do kinit or specify a JAAS file on your command line. As a result, the MM JVM will use the TGT from clients ticket cache or will get TGT using kerberos principal and keytab configured in JAAS file.
+
+It is suggested to configure JAAS file to use keytab and principal instead of ticket cache in cases where MM will be running for more than configured ticket expiry time.
+
+It is not recommended to mirror the __consumer_offsets topics. If you specify --white-list=".*", MirrorMaker tries to fetch data from the system-level topic __consumer-offsets and as a result produce that data to the target cluster. 
+
+Make sure you added exclude.internal.topics=true in consumer properties
+
+Workaround: Specify topic names, or to replicate all topics, specify --blacklist="__consumer-offsets".
